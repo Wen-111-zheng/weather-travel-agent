@@ -1,0 +1,11 @@
+services:
+  weather-agent:
+    build:
+      context: ..        # 以 01-Agent 为上下文，包含 PocketFlow 与 weather-travel-agent
+      dockerfile: weather-travel-agent/Dockerfile
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - PYTHONPATH=/app:/app/PocketFlow
+    ports:
+      - "8000:8000"

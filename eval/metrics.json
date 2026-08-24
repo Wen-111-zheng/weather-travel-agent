@@ -1,0 +1,10 @@
+{
+  "total_cases": 10,
+  "task_success_rate": 1.0,
+  "intent_accuracy": 0.9,
+  "task_routing_accuracy": 1.0,
+  "avg_latency_s": 7.012,
+  "weather_fallback_rate": 0.0,
+  "retrieval_accuracy": 1.0,
+  "repeat_question_rate": 0.455
+}

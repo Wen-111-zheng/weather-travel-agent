@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 环境变量 / 密钥（即使当前用 env var 读取，也防万一）
+.env
+.env.*
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db

@@ -1,0 +1,12 @@
+[
+  {"question": "北京今天天气怎么样", "expected_action": "weather", "expected_tags": ["城市-北京"]},
+  {"question": "深圳明天适合带宝宝去户外吗", "expected_action": "weather", "expected_tags": ["城市-深圳", "亲子"]},
+  {"question": "上海梅雨季要注意什么", "expected_action": "travel", "expected_tags": ["城市-上海"]},
+  {"question": "哈尔滨现在冷不冷", "expected_action": "weather", "expected_tags": ["城市-哈尔滨"]},
+  {"question": "广州台风天还能出门吗", "expected_action": "travel", "expected_tags": ["城市-广州"]},
+  {"question": "成都春秋适合旅游吗", "expected_action": "travel", "expected_tags": ["城市-成都"]},
+  {"question": "骑行出行要注意什么天气", "expected_action": "travel", "expected_tags": ["骑行"]},
+  {"question": "北京和成都天气对比一下", "expected_action": "weather", "expected_tags": ["城市-北京", "城市-成都"]},
+  {"question": "你好啊", "expected_action": "chat", "expected_tags": []},
+  {"question": "高温天通勤怎么防暑", "expected_action": "travel", "expected_tags": ["高温", "通勤"]}
+]
