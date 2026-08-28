@@ -3,8 +3,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 复制依赖与源码
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-api.txt
 
 COPY . .
 

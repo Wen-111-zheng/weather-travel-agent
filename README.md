@@ -133,13 +133,15 @@
 ## 七、运行方式
 
 ```bash
-# 1) 命令行（需把 PocketFlow 源码目录加入 PYTHONPATH）
-export PYTHONPATH=/path/to/PocketFlow
+# 1) 命令行（PocketFlow 已自动加入 sys.path，无需手动设 PYTHONPATH）
 export DEEPSEEK_API_KEY=sk-xxx        # 可选；无则回退启发式
-python main.py "北京和深圳天气怎么样，带宝宝出门"
+# 方式 A：直接传问题（默认框架 langgraph；推荐 pocketflow）
+python main.py "北京和深圳天气怎么样，带宝宝出门" --framework pocketflow
+# 方式 B：不传问题，进入交互式提问（先问"请问要咨询什么天气？"再回答）
+python main.py --framework pocketflow
 
-# 2) HTTP 服务
-pip install -r requirements.txt
+# 2) HTTP 服务（额外依赖见 requirements-api.txt）
+pip install -r requirements-api.txt
 uvicorn api.app:app --host 0.0.0.0 --port 8000
 # POST /chat  {"question":"北京天气怎么样，带宝宝"}
 
@@ -169,7 +171,8 @@ weather-travel-agent/
 ├── Dockerfile / docker-compose.yml
 ├── eval/                    # 评测集 + 评测脚本 + metrics.json
 ├── main.py                  # CLI 入口
-└── requirements.txt
+├── requirements.txt         # 核心依赖（openai / requests）
+└── requirements-api.txt     # 可选：HTTP 服务依赖（fastapi / uvicorn）
 ```
 
 ## 九、我还在折腾的

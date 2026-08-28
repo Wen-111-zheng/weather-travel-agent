@@ -19,3 +19,6 @@ env/
 Thumbs.db
 
 面试题与参考答案.md
+
+# 运行时生成的用户画像（每次运行自动重建，不入库）
+memory/user_profile.json
