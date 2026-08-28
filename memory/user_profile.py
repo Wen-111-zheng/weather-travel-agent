@@ -11,6 +11,14 @@ import os
 import json
 from collections import Counter
 
+# 临时上下文偏好：仅当前这一轮出行有效（带宝宝/带老人/陪老人等）。
+# 与"稳定偏好"(如通勤、骑行、防晒)区分开，跑完本轮自动从记忆里清掉，
+# 避免污染下一轮"我一个人出门"的提示词。
+TEMPORARY_PREFERENCE_TAGS = {
+    "带宝宝", "带小孩", "带孩子", "带婴幼儿", "带婴儿", "和宝宝",
+    "带老人", "陪老人", "和老人", "扶老人", "老人",
+}
+
 MEMORY_PATH = os.path.join(os.path.dirname(__file__), "user_profile.json")
 
 
@@ -60,3 +68,22 @@ def repeat_rate():
 def reset():
     if os.path.exists(MEMORY_PATH):
         os.remove(MEMORY_PATH)
+
+
+def clear_temporary_preferences():
+    """清掉临时上下文偏好（带宝宝/带老人/陪老人等）。
+
+    设计原因：这些是"这一趟出行的临时上下文"（这次带宝宝出门），
+    不是稳定的用户画像（我经常通勤）。若不清掉，会被
+    agents/core.py 第 59 行无脑合并到下一轮 prompt 里，导致
+    "我一个人出门"却给"带宝宝"建议。
+    稳定偏好（如"通勤"/"防晒"/"骑行"）会保留。
+    """
+    d = _load()
+    before = d.get("preferences", [])
+    after = [p for p in before if p not in TEMPORARY_PREFERENCE_TAGS]
+    cleared = [p for p in before if p in TEMPORARY_PREFERENCE_TAGS]
+    if after != before:
+        d["preferences"] = after
+        _save(d)
+    return {"cleared": cleared, "kept": after}

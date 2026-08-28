@@ -115,6 +115,7 @@
 - **假设 2**：长期记忆能减少"重复问偏好"的尴尬，但要克制。
   - 实验：`user_profile.json` 存常问城市 + 偏好标签，跨轮复用。
   - 结论：记忆该存"稳定偏好"，不该存"一次性上下文"——存多了反而污染下一轮。这是我自己踩过的坑。
+  - 当前实现：偏好分两类。**临时上下文偏好**（带宝宝 / 带老人 / 陪老人 等）跑完本轮自动从 JSON 里清掉，不会污染"我一个人出门"的下一轮；**稳定偏好**（通勤 / 防晒 / 骑行 等）保留、跨轮复用。实现见 `memory/user_profile.py` 的 `TEMPORARY_PREFERENCE_TAGS` 与 `clear_temporary_preferences()`。
 
 - **假设 3**：prompt 结构（意图抽取 vs 直接生成）影响路由准确率。
   - 实验：把"意图识别"独立成 IntentAgent 后，闲聊/任务路由准确率到 100%；之前混在一个 Agent 里时，边界句经常跑偏。
@@ -139,6 +140,8 @@ export DEEPSEEK_API_KEY=sk-xxx        # 可选；无则回退启发式
 python main.py "北京和深圳天气怎么样，带宝宝出门" --framework pocketflow
 # 方式 B：不传问题，进入交互式提问（先问"请问要咨询什么天气？"再回答）
 python main.py --framework pocketflow
+# 跑完一次后，临时偏好（带宝宝/带老人/陪老人）会自动从记忆中清掉，
+# 不会污染下一轮"我一个人出门"的提示词（稳定偏好如通勤/防晒会保留）。
 
 # 2) HTTP 服务（额外依赖见 requirements-api.txt）
 pip install -r requirements-api.txt

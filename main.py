@@ -45,6 +45,13 @@ def main():
     print("回答：")
     print(answer)
 
+    # 跑完本轮后清掉"带宝宝/带老人"等临时上下文偏好，避免污染下一轮
+    # （稳定偏好如"通勤/防晒"会保留）
+    from memory.user_profile import clear_temporary_preferences
+    res = clear_temporary_preferences()
+    if res["cleared"]:
+        print(f"\n[记忆清理] 已清掉本轮临时偏好：{res['cleared']}（不影响稳定偏好）")
+
 
 if __name__ == "__main__":
     main()
