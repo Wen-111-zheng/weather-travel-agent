@@ -136,10 +136,12 @@
 ```bash
 # 1) 命令行（PocketFlow 已自动加入 sys.path，无需手动设 PYTHONPATH）
 export DEEPSEEK_API_KEY=sk-xxx        # 可选；无则回退启发式
-# 方式 A：直接传问题（默认框架 langgraph；推荐 pocketflow）
+# 方式 A：直接传问题（默认框架是 langgraph）
+python main.py "北京和深圳天气怎么样，带宝宝出门"
+# 想走 PocketFlow 编排（依赖更少、录制 demo 推荐，需显式指定）：
 python main.py "北京和深圳天气怎么样，带宝宝出门" --framework pocketflow
 # 方式 B：不传问题，进入交互式提问（先问"请问要咨询什么天气？"再回答）
-python main.py --framework pocketflow
+python main.py
 # 跑完一次后，临时偏好（带宝宝/带老人/陪老人）会自动从记忆中清掉，
 # 不会污染下一轮"我一个人出门"的提示词（稳定偏好如通勤/防晒会保留）。
 

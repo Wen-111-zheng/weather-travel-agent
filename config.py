@@ -5,8 +5,21 @@
 """
 import os
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-SILICONFLOW_API_KEY = os.environ.get("SILICONFLOW_API_KEY")
+
+def _clean_env(name):
+    """读取环境变量并清洗：去掉首尾空白与误带的引号。
+
+    兼容 `set KEY="sk-xxx"`（CMD 下引号会变成值的一部分）这类写法，
+    避免 API Key 末尾混入 `"` 导致 401 Authentication Fails。
+    """
+    val = os.environ.get(name)
+    if val is None:
+        return None
+    return val.strip().strip('"').strip("'").strip()
+
+
+DEEPSEEK_API_KEY = _clean_env("DEEPSEEK_API_KEY")
+SILICONFLOW_API_KEY = _clean_env("SILICONFLOW_API_KEY")
 
 # 是否使用真实大模型（无 key 时为 False，使用 mock 兜底）
 USE_REAL_LLM = bool(DEEPSEEK_API_KEY)

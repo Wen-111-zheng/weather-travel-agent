@@ -2,8 +2,8 @@
 """命令行入口：运行多智能体天气出行助手。
 
 支持两套编排框架（--framework）：
-  - langgraph  （默认）基于 LangGraph StateGraph 编排
-  - pocketflow  基于 PocketFlow Flow 编排
+  - langgraph（默认）基于 LangGraph StateGraph 编排
+  - pocketflow       基于 PocketFlow Flow 编排
 两者复用同一套 agents/core.py 核心逻辑、MCP 工具、RAG 与长期记忆。
 """
 import os
@@ -21,7 +21,8 @@ def main():
     p = argparse.ArgumentParser(description="多智能体天气出行助手")
     p.add_argument("query", nargs="?", default=None,
                    help="要咨询的天气/出行问题；留空则进入交互式提问")
-    p.add_argument("--framework", choices=["pocketflow", "langgraph"], default="langgraph")
+    p.add_argument("--framework", choices=["pocketflow", "langgraph"], default="langgraph",
+                   help="编排框架，默认 langgraph；切换 pocketflow 请显式指定（依赖更少、录制 demo 更稳）")
     args = p.parse_args()
 
     # 交互式：未传 query 时先问一句，再把用户输入接入后续流程
