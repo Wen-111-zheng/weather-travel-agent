@@ -260,7 +260,8 @@ _（踩坑会持续往这里加；下一个想写的是「MCP stdio 子进程启
 ### 验证（我跑出来的）
 - 同一 `thread_id` 下：第一轮「北京天气怎么样，带宝宝」→ 第二轮「那适合带宝宝吗」，助手正确接上北京并给天气+建议；
 - 不同 `thread_id` 互不干扰（北京会话 vs 上海会话各自独立）；
-- PocketFlow 编排路径**一行没动**，单轮评测照常通过——进一步印证「核心能力与框架解耦」这件事。
+- PocketFlow 编排路径**一行没动**，单轮评测照常通过——进一步印证「核心能力与框架解耦」这件事；
+- **评测落地（Checkpoint 验收关）**：`eval/multi_turn_eval.py` 已把 `thread_id` 焊进评测链路——langgraph 路径复用同一 `MemorySaver` + app 实例、按 `thread_id` 隔离，跨轮状态**真正持久**（之前每次新建 app 会丢状态）；数据集扩到 **20 会话 / 63 轮**，覆盖偏好继承 / 跨城市 / 闲聊插入 / 纠错 / 长多轮等场景，量化 `turn_pass_rate` / `avg_preference_recall` / `avg_repeat_rate`。本机真实 DeepSeek 跑分见 `metrics_multiturn_{framework}.json`。
 
 > 局限：本地启发式（无 DeepSeek Key）的意图识别只认「建议/穿/出行」等触发词，不会抽「带宝宝」这类偏好；注入 `DEEPSEEK_API_KEY` 后真实大模型会正常抽取。多轮「城市」继承在两种模式下都生效。
 
@@ -285,7 +286,7 @@ _（踩坑会持续往这里加；下一个想写的是「MCP stdio 子进程启
 把第三节那张「我自测的表」从「单轮启发式对不对」升级成可回归的工程化评测（`eval/`）：
 
 - **LLM-as-Judge 五维**：用真实 DeepSeek 当裁判，对每条用例从「任务完成 / 路由准确 / 意图抽取 / 建议相关性 / 安全性」五个维度打分，不再是「看着还行」；
-- **多轮对话评测**：`multi_turn_eval.py` + `multi_turn_set.json` 验证「带 thread_id 跨轮继承城市/偏好」确实生效（如「北京天气，带宝宝」→「那适合带宝宝吗」接得上）；
+- **多轮对话评测（真·thread_id 验收关）**：`multi_turn_eval.py` + `multi_turn_set.json`（**20 会话 / 63 轮**）验证「带 thread_id 跨轮继承城市/偏好」确实生效；评测链路对 langgraph 复用同一 `MemorySaver` + app 实例、按 `thread_id` 隔离，Checkpoint 真正跨轮持久（pocketflow 走磁盘记忆对照）。量化 `turn_pass_rate` / `avg_preference_recall` / `avg_repeat_rate`，本机真实 DeepSeek 跑分见 `metrics_multiturn_{framework}.json`。
 - **并发提速 + 线程安全**：`ThreadPoolExecutor` 并发跑用例，记忆读写加锁，60 题量级从串行十几分钟压到几分钟；
 - **Token 成本折算**：`cost.py` 统计每轮 prompt/completion token 与折算金额，优化 prompt 时能看见「省了多少钱」；
 - **BadCase 归因**：`badcase.py` 把失败用例按 6 类归因（路由错 / 意图漏 / 检索偏 / 建议偏 / 格式坏 / 超时），输出 `badcases_*.json` 方便定点修。
