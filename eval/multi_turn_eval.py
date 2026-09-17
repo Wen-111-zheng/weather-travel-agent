@@ -34,11 +34,17 @@ JUDGE_DIMS = ("relevance", "factuality", "completeness", "safety", "conciseness"
 
 
 def run_session(session, framework):
-    """跑一个会话（顺序多轮，共享记忆），返回该会话评测结果。"""
+    """跑一个会话（顺序多轮，共享记忆），返回该会话评测结果。
+
+    每个会话用唯一 session_id 作 thread_id：langgraph 走真 Checkpoint（同 thread_id 跨轮
+    复用 MemorySaver），pocketflow 忽略 thread_id（走磁盘 user_profile.json 记忆）。两者都
+    通过 reset() 得到干净会话基线（磁盘记忆全局单文件，必须串行 + reset）。
+    """
     reset()  # 清空记忆，得到干净会话基线（记忆是全局单文件，必须串行 + reset）
+    tid = str(session.get("session_id"))
     turns = []
     for t in session["turns"]:
-        st = run_query(t["question"], framework)
+        st = run_query(t["question"], framework, thread_id=tid)
         answer = st.get("answer", "")
         j = judge(t["question"], answer)  # weather_data/docs 默认 None，与单轮评测同口径
         judge_score = None

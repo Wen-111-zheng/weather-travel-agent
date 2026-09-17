@@ -1,38 +1,185 @@
 [
   {
-    "session_id": 1,
-    "scenario": "偏好跨轮复用：T1 建立'通勤'偏好，T2 不重提，答案应仍含'通勤'",
+    "session_id": "s01",
+    "scenario": "偏好继承-带宝宝：T1 建偏好，T2/T3 不重提应仍含'宝宝'（Checkpoint 跨轮继承）",
     "turns": [
-      {"question": "北京通勤天气怎么样"},
-      {"question": "上海呢，适合出门吗", "expected_pref": ["通勤"]}
+      {"question": "北京今天天气怎么样"},
+      {"question": "带宝宝出门合适吗", "expected_pref": ["宝宝"]},
+      {"question": "那上海呢，也适合带宝宝吗", "expected_pref": ["宝宝"]}
     ]
   },
   {
-    "session_id": 2,
-    "scenario": "重复提问：同一城市连问三次，记忆应记录重复（repeat_rate 偏高）",
+    "session_id": "s02",
+    "scenario": "偏好继承-带老人：T2/T3 不重提应仍含'老人'",
     "turns": [
-      {"question": "北京今天天气"},
-      {"question": "北京今天天气"},
-      {"question": "北京今天天气"}
+      {"question": "广州天气如何"},
+      {"question": "带老人去逛公园有建议吗", "expected_pref": ["老人"]},
+      {"question": "老人容易累，路线轻松点", "expected_pref": ["老人"]}
     ]
   },
   {
-    "session_id": 3,
-    "scenario": "多城市 + 偏好跨轮：T3 建立'骑行'，T4 不重提应仍含'骑行'",
+    "session_id": "s03",
+    "scenario": "偏好继承-防晒：T2/T3 不重提应仍含'防晒'",
+    "turns": [
+      {"question": "三亚今天热吗"},
+      {"question": "我皮肤怕晒，需要防晒吗", "expected_pref": ["防晒"]},
+      {"question": "那紫外线指数高不高", "expected_pref": ["防晒"]}
+    ]
+  },
+  {
+    "session_id": "s04",
+    "scenario": "跨城市并行 + 单城追问：T1 双城，T2/T3 缩到单城",
+    "turns": [
+      {"question": "北京和深圳今天天气对比一下"},
+      {"question": "深圳下雨吗"},
+      {"question": "那北京呢"}
+    ]
+  },
+  {
+    "session_id": "s05",
+    "scenario": "闲聊插入回任务：T2 闲聊兜底后 T3 回到天气任务",
     "turns": [
       {"question": "北京天气怎么样"},
-      {"question": "上海天气怎么样，带宝宝"},
-      {"question": "广州适合骑行吗"},
-      {"question": "深圳天气适合出门吗", "expected_pref": ["骑行"]}
+      {"question": "谢谢"},
+      {"question": "那适合穿什么"}
     ]
   },
   {
-    "session_id": 4,
-    "scenario": "混合意图：闲聊 + 天气 + 闲聊，验证轮级可用率 turn_pass_rate",
+    "session_id": "s06",
+    "scenario": "混合意图-旅游：T1 天气+旅游，T3 引入'宝宝'偏好",
+    "turns": [
+      {"question": "成都今天天气，准备去旅游"},
+      {"question": "有什么穿衣建议"},
+      {"question": "带宝宝的话要注意什么", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s07",
+    "scenario": "重复提问-同城市：同一城市连问三次，记忆应记录重复（repeat_rate 偏高）",
+    "turns": [
+      {"question": "杭州天气"},
+      {"question": "杭州今天气温多少"},
+      {"question": "杭州明天呢"}
+    ]
+  },
+  {
+    "session_id": "s08",
+    "scenario": "纠错：T2 纠正城市，T3 在新城市引入'宝宝'偏好",
+    "turns": [
+      {"question": "南京天气怎么样"},
+      {"question": "不对，是苏州"},
+      {"question": "苏州适合带宝宝吗", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s09",
+    "scenario": "长多轮逐步细化（5 轮）：天气→偏好→下雨→室内→整体适合度",
+    "turns": [
+      {"question": "武汉天气"},
+      {"question": "带宝宝出门行吗", "expected_pref": ["宝宝"]},
+      {"question": "那下雨怎么办"},
+      {"question": "有室内推荐吗"},
+      {"question": "武汉整体适合周末玩吗"}
+    ]
+  },
+  {
+    "session_id": "s10",
+    "scenario": "多偏好组合：T1 同时建'宝宝'+'防晒'，T2 不重提应仍含两者",
+    "turns": [
+      {"question": "厦门天气，带宝宝还怕晒", "expected_pref": ["宝宝", "防晒"]},
+      {"question": "那要注意什么", "expected_pref": ["宝宝", "防晒"]},
+      {"question": "厦门和青岛哪个更适合"}
+    ]
+  },
+  {
+    "session_id": "s11",
+    "scenario": "指代-那呢：T2'T3 用'那'追问，应继承上轮城市+偏好'宝宝'",
+    "turns": [
+      {"question": "重庆今天天气"},
+      {"question": "那适合带宝宝吗", "expected_pref": ["宝宝"]},
+      {"question": "如果转凉了穿啥", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s12",
+    "scenario": "跨城+偏好：T2/T3 在不重提下应仍含'老人'",
+    "turns": [
+      {"question": "西安和洛阳天气"},
+      {"question": "带老人去，哪个舒服", "expected_pref": ["老人"]},
+      {"question": "老人怕热，选哪个", "expected_pref": ["老人"]}
+    ]
+  },
+  {
+    "session_id": "s13",
+    "scenario": "闲聊+任务混合：T1 纯闲聊兜底，T2/T3 进入天气+偏好",
     "turns": [
       {"question": "你好"},
-      {"question": "北京今天多少度"},
-      {"question": "讲个笑话"}
+      {"question": "天津天气怎么样"},
+      {"question": "带宝宝去天津之眼合适吗", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s14",
+    "scenario": "出行建议-骑行：T2/T3 引入并复用'骑行'偏好",
+    "turns": [
+      {"question": "昆明天气"},
+      {"question": "准备骑行，有建议吗", "expected_pref": ["骑行"]},
+      {"question": "骑行要带什么", "expected_pref": ["骑行"]}
+    ]
+  },
+  {
+    "session_id": "s15",
+    "scenario": "通勤偏好：T1/T2/T3 持续'通勤'偏好应被复用",
+    "turns": [
+      {"question": "上海今天上班天气", "expected_pref": ["通勤"]},
+      {"question": "通勤要带伞吗", "expected_pref": ["通勤"]},
+      {"question": "明天通勤呢", "expected_pref": ["通勤"]}
+    ]
+  },
+  {
+    "session_id": "s16",
+    "scenario": "边界-无关：T1/T3 闲聊/无关，T2 正常天气任务",
+    "turns": [
+      {"question": "今天心情不太好"},
+      {"question": "那北京天气呢"},
+      {"question": "随便聊聊别的"}
+    ]
+  },
+  {
+    "session_id": "s17",
+    "scenario": "多城市+偏好：T1 双城+宝宝，T2/T3 不重提应仍含'宝宝'",
+    "turns": [
+      {"question": "哈尔滨和长春天气，带宝宝", "expected_pref": ["宝宝"]},
+      {"question": "哪个更冷", "expected_pref": ["宝宝"]},
+      {"question": "冷的话怎么穿", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s18",
+    "scenario": "纠错+偏好：T2 纠正城市，T3 引入'宝宝'",
+    "turns": [
+      {"question": "长沙天气"},
+      {"question": "我说的是贵阳"},
+      {"question": "贵阳带宝宝合适吗", "expected_pref": ["宝宝"]}
+    ]
+  },
+  {
+    "session_id": "s19",
+    "scenario": "长多轮-天气链（4 轮）：天气→降雨→户外→室内",
+    "turns": [
+      {"question": "济南天气"},
+      {"question": "下雨概率大吗"},
+      {"question": "那适合户外吗"},
+      {"question": "改室内有推荐吗"}
+    ]
+  },
+  {
+    "session_id": "s20",
+    "scenario": "综合压测：高原+宝宝+跨城对比紫外线",
+    "turns": [
+      {"question": "拉萨天气，高原反应要注意"},
+      {"question": "带宝宝去行不行", "expected_pref": ["宝宝"]},
+      {"question": "和北京比哪个紫外线强"}
     ]
   }
 ]

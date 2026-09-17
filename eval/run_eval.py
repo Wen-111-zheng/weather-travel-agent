@@ -43,12 +43,31 @@ from cost import compute_cost                              # 阶段三 B：用�
 kb = KnowledgeBase()
 
 
-def run_query(question, framework):
-    """返回统一的 state dict：{question, answer, intent, cities, preferences, weather_data}。"""
+# 阶段三 ③ 验收关：langgraph 多轮按 thread_id 复用同一 MemorySaver + app 实例，
+# 让 Checkpoint 真正跨轮持久（默认不挂 checkpointer 时每次 invoke 状态即丢）。key = thread_id。
+_lg_app_cache = {}
+
+
+def run_query(question, framework, thread_id=None):
+    """返回统一的 state dict：{question, answer, intent, cities, preferences, weather_data}。
+
+    thread_id 非空（仅 langgraph 生效）：复用同一 MemorySaver + app 实例、按 thread_id 隔离，
+    实现 Checkpoint 真·跨轮持久（阶段三 ③ 验收关）。pocketflow 忽略 thread_id（走磁盘记忆），向后兼容。
+    """
     if framework == "langgraph":
         from langgraph_flow import create_langgraph_app
-        app = create_langgraph_app()
-        state = app.invoke({"question": question})
+        from langgraph.checkpoint.memory import MemorySaver
+        if thread_id:
+            app = _lg_app_cache.get(thread_id)
+            if app is None:
+                cp = MemorySaver()
+                app = create_langgraph_app(cp)
+                _lg_app_cache[thread_id] = app
+            state = app.invoke({"question": question},
+                               config={"configurable": {"thread_id": thread_id}})
+        else:
+            app = create_langgraph_app()
+            state = app.invoke({"question": question})
         state["question"] = question
         return state
     else:
