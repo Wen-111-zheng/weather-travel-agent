@@ -2,14 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 复制依赖与源码
-COPY requirements.txt requirements-api.txt .
+# 依赖先拷（利用 Docker 层缓存）：requirements 位于 weather-travel-agent/ 下
+COPY weather-travel-agent/requirements.txt weather-travel-agent/requirements-api.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-api.txt
 
-COPY . .
+# 源码与本地依赖 PocketFlow（二者是 01-Agent 下的同级目录，构建上下文见 docker-compose.yml 的 context: ..）
+COPY weather-travel-agent/ /app
+COPY PocketFlow/ /app/PocketFlow
 
-# PocketFlow 作为本地依赖一起 COPY（与 weather-travel-agent 同级）
-# 构建上下文需包含 ../PocketFlow，见 docker-compose.yml 的 build context
 ENV PYTHONPATH=/app:/app/PocketFlow
 ENV PYTHONIOENCODING=utf-8
 
