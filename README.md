@@ -145,13 +145,21 @@ python main.py
 # 跑完一次后，临时偏好（带宝宝/带老人/陪老人）会自动从记忆中清掉，
 # 不会污染下一轮"我一个人出门"的提示词（稳定偏好如通勤/防晒会保留）。
 
-# 2) HTTP 服务（额外依赖见 requirements-api.txt）
+# 2) HTTP 服务（依赖见 requirements-api.txt：fastapi / uvicorn / langgraph）
 pip install -r requirements-api.txt
 uvicorn api.app:app --host 0.0.0.0 --port 8000
-# POST /chat  {"question":"北京天气怎么样，带宝宝"}
+# LangGraph 分支：编译时挂 MemorySaver 检查点（按 thread_id 隔离），并发安全；记忆读写已加线程锁
+# POST /chat  {"question":"北京天气怎么样，带宝宝", "framework":"pocketflow"}   # framework 可省，默认 langgraph
+#   -> {"answer":"...", "intent":{...}, "cities":[...], "preferences":[...], "framework":"pocketflow"}
+# 多轮对话：带上 thread_id，同一 thread_id 跨轮共享状态（上一轮城市/偏好被引用）；不带则每次新建隔离会话
+#   POST /chat  {"question":"北京天气怎么样，带宝宝", "framework":"langgraph", "thread_id":"A"}
+#   POST /chat  {"question":"那适合带宝宝吗",         "framework":"langgraph", "thread_id":"A"}   # 接上轮北京
+# GET  /health -> {"status":"ok"}
 
-# 3) Docker
+# 3) Docker（构建上下文为 01-Agent 上级目录，自动包含 PocketFlow 与本项目）
 docker compose up --build
+# 容器内 uvicorn 监听 8000，宿主映射 8000:8000；启动时通过环境变量注入两个 Key：
+#   DEEPSEEK_API_KEY / SILICONFLOW_API_KEY（在 01-Agent 目录的 .env 或 shell 中提供）
 ```
 
 ## 八、文件结构
@@ -172,12 +180,15 @@ weather-travel-agent/
 ├── agents/                  # IntentAgent / WeatherAgent / AdviceAgent / ChatAgent
 ├── flow.py                  # 多 Agent 编排（PocketFlow Flow）
 ├── langgraph_flow.py        # 多 Agent 编排（LangGraph StateGraph）
-├── api/app.py               # FastAPI 服务
-├── Dockerfile / docker-compose.yml
-├── eval/                    # 评测集 + 评测脚本 + metrics.json
+├── api/app.py               # FastAPI 服务（/chat 富返回 + /health）
+├── Dockerfile / docker-compose.yml / .dockerignore
+├── eval/                    # 评测集 + 评测脚本（run_eval / judge / cost / badcase / multi_turn_eval）+ 结果 JSON
+├── tracing/                 # 调用链追踪模块（span / collector / storage / report）
+├── tracing_demo.py          # 追踪演示脚本
+├── docs/                    # 排错实录等过程文档
 ├── main.py                  # CLI 入口
 ├── requirements.txt         # 核心依赖（openai / requests）
-└── requirements-api.txt     # 可选：HTTP 服务依赖（fastapi / uvicorn）
+└── requirements-api.txt     # 可选：HTTP 服务依赖（fastapi / uvicorn / langgraph）
 ```
 
 ## 九、我还在折腾的
@@ -217,6 +228,79 @@ Agent 这条线我还在往前走。
 
 **修法 / 建议**：录 demo 一律用 `--framework pocketflow`——依赖更少、响应链路短一半、不触发 LangGraph 的内部重试循环。如果 pocketflow 也偶发卡，那是 DeepSeek 那边的网络问题，多试几次就好，跟代码无关。这也顺带印证了我第四节那句「两个框架都能落地同一个 Agent，区别在心智负担放在哪」。
 
+### 坑 3（更多实战排错见文档）
+
+上面两坑是「记忆污染」和「默认框架卡死」。我在亲手测试多智能体功能时还连续撞上几个更偏工程的坑，已经单独整理进 **`docs/排错实录.md`**，面试或复盘时能直接拿来用，主要包括：
+
+- **PowerShell 双编码坑**：`Invoke-RestMethod` 把 UTF-8 响应按 CP1252 解码成脏数据（`åå¬`）；内联中文 `curl -d '{...}'` 按 GBK 发出 → FastAPI 解析失败 `422`。修法是 payload 写 UTF-8 无 BOM 文件 + `curl -d "@p.json"`。
+- **真实 LLM 被代理掐**：开着 `DEEPSEEK_API_KEY` + FlClash 代理时，真实调用被劫持返空 → 走闲聊分支、`cities=None`。修法是评测时关掉代理直连。
+- **QuickEdit 冻结服务**：控制台点选日志文字 → stdout 写入阻塞 → 事件循环冻住 → 所有请求（含 `/health`）挂起。修法是取消 QuickEdit + 测试窗口与服务窗口分离。
+- **MCP stdio 无超时**：原 `readline()` 无限阻塞，天气子进程卡住时整个请求挂死。修法是后台线程泵 stdout + 20s 超时（见下一节 fix 与 `mcp/mcp_client.py`）。
+
 ---
 
 _（踩坑会持续往这里加；下一个想写的是「MCP stdio 子进程启动失败如何定位」。）_
+
+---
+
+## 十一、阶段三 ③：从「线性管道」升级到「Supervisor 协调 + Checkpoint 多轮」（已落地）
+
+前面几节是一个能跑、能演示的单 Agent→多 Agent 系统。这一节记的是我把**编排层**再往前推一步：让多个 Agent 不是「写死串成一条线」，而是由一个「主管(Supervisor)」来协调，并且让对话**有记忆、能多轮**。
+
+### 为什么要做
+- 旧的 LangGraph 编排是固定管道：`intent → weather → advice`（或 `intent → chat`），分支用一行写死的 `route_intent` 规则判断。它能工作，但「谁来决定下一步」是硬编码的，谈不上真正的「多智能体协作」。
+- 每来一个请求就新建一个 app 实例，请求结束状态即丢，**没有跨轮记忆**，所以「北京天气怎么样」之后问「那适合带宝宝吗」，助手根本不知道「那」指的是北京。
+
+### 我怎么做的
+- **Supervisor 节点**：新增一个 LLM 当「调度主管」的节点，它看用户这句话（以及上一轮回答）判断走「任务分支」(意图→天气→建议) 还是「闲聊分支」兜底。没有真实 LLM Key 时自动退化为规则路由（含「谢谢/你好」等闲聊词直接兜底，避免又被拿去查一遍天气），保证离线/演示照样能跑。
+- **Checkpoint（检查点）**：编译 LangGraph 时挂上 `MemorySaver`，图的状态（城市、偏好、上一轮回答）按 `thread_id` 持久化。这样 LangGraph 才能跨请求「恢复」状态，而不是每次从零开始。
+- **多轮上下文**：意图识别节点会把「上一轮回答」作为上下文并入（当前问题放最前，避免本地启发式误抽），并且本轮没抽到城市/偏好时，自动继承上一轮的——所以「那适合带宝宝吗」能正确接着北京答，而不是因为没城市走兜底。
+- **接口升级**：`/chat` 增加可选 `thread_id`；同一个 `thread_id` 跨轮共享状态，不同 `thread_id` 互不串档；不带 `thread_id` 则每次新建隔离会话（向后兼容，单轮表现不变）。`main.py` 的 langgraph 路径也改成多轮交互循环。
+
+### 验证（我跑出来的）
+- 同一 `thread_id` 下：第一轮「北京天气怎么样，带宝宝」→ 第二轮「那适合带宝宝吗」，助手正确接上北京并给天气+建议；
+- 不同 `thread_id` 互不干扰（北京会话 vs 上海会话各自独立）；
+- PocketFlow 编排路径**一行没动**，单轮评测照常通过——进一步印证「核心能力与框架解耦」这件事。
+
+> 局限：本地启发式（无 DeepSeek Key）的意图识别只认「建议/穿/出行」等触发词，不会抽「带宝宝」这类偏好；注入 `DEEPSEEK_API_KEY` 后真实大模型会正常抽取。多轮「城市」继承在两种模式下都生效。
+
+---
+
+## 十二、阶段三后面我又落地的三件事（RAG 混合检索 / 评测体系 / 调用链追踪）
+
+第十节、十一节记的是「编排层」往前推的那一步。这一节记的是同一阶段里我顺手做扎实的另外三块：**让检索更准、让效果可量化、让链路可观测**。
+
+### 1. RAG 混合检索（embedding + 关键词 + RRF 融合重排）
+
+之前知识库检索只用 `bge-m3` 向量余弦。我把它升级成**混合检索**：
+
+- **向量召回**：`BAAI/bge-m3` 句向量余弦，抓语义相近；
+- **关键词召回**：对 query 做 bigram 切分，和知识条目做词面匹配，补向量召回「字面精准但语义飘」的漏；
+- **RRF 融合重排**：两套结果按排名倒数加权融合（`score = Σ 1/(k+rank)`），再取 Top-N 喂给 AdviceAgent。
+
+**我跑出来的结论**：纯向量在「带宝宝 / 防晒」这类短偏好词上容易飘，纯关键词又抓不到「宝宝出门要注意什么」的语义；混合之后检索命中更稳，建议也更贴知识库原文。无 `SILICONFLOW_API_KEY` 时自动退化成纯关键词回退，演示照样能跑。
+
+### 2. 评测体系升级（LLM-as-Judge 五维 / 多轮 / 并发 / 成本 / BadCase）
+
+把第三节那张「我自测的表」从「单轮启发式对不对」升级成可回归的工程化评测（`eval/`）：
+
+- **LLM-as-Judge 五维**：用真实 DeepSeek 当裁判，对每条用例从「任务完成 / 路由准确 / 意图抽取 / 建议相关性 / 安全性」五个维度打分，不再是「看着还行」；
+- **多轮对话评测**：`multi_turn_eval.py` + `multi_turn_set.json` 验证「带 thread_id 跨轮继承城市/偏好」确实生效（如「北京天气，带宝宝」→「那适合带宝宝吗」接得上）；
+- **并发提速 + 线程安全**：`ThreadPoolExecutor` 并发跑用例，记忆读写加锁，60 题量级从串行十几分钟压到几分钟；
+- **Token 成本折算**：`cost.py` 统计每轮 prompt/completion token 与折算金额，优化 prompt 时能看见「省了多少钱」；
+- **BadCase 归因**：`badcase.py` 把失败用例按 6 类归因（路由错 / 意图漏 / 检索偏 / 建议偏 / 格式坏 / 超时），输出 `badcases_*.json` 方便定点修。
+
+> 复现：`python eval/run_eval.py`（单轮）、`python eval/multi_turn_eval.py`（多轮），需 `DEEPSEEK_API_KEY`；无 key 自动回退启发式，仍可跑通。
+
+### 3. 调用链追踪（tracing 模块 + traces.db）
+
+为了知道「一次回答到底慢在哪、花了多少 token」，我写了个轻量追踪模块（`tracing/`）：
+
+- **span**：给「意图识别 / 天气调用 / 知识检索 / 建议生成」每一步打点，记录起止时间、token、状态；
+- **collector**：在 Agent 执行时收集 span；
+- **storage**：落本地 `traces.db`（SQLite），可跨次查询；
+- **report**：按 trace 汇总每步时延与 token，定位瓶颈。
+
+`tracing_demo.py` 是一条可直接跑的演示。这东西不直接进主链路，是「观测层」——但它让我在优化时能拿数据说话，而不是猜。
+
+> 这些能力都是我在这次阶段三里亲手加、亲手跑通的。它们和「编排」是两条线：编排决定「怎么串」，检索/评测/追踪决定「串出来好不好、怎么证明、怎么看」。

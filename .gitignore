@@ -22,3 +22,11 @@ Thumbs.db
 
 # 运行时生成的用户画像（每次运行自动重建，不入库）
 memory/user_profile.json
+
+# 测试 / 调试产生的临时文件（curl 测试载荷与响应、服务日志、追踪库）
+p*.json
+r*.json
+uvicorn_host.log
+traces.db
+*.db
+eval/rag_eval_dashboard.html
