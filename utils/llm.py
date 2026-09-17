@@ -9,20 +9,114 @@
 import os
 import re
 import json
+import threading
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, USE_REAL_LLM
+from tracing import trace
 
 SYSTEM_PROMPT = "你是一个专业的天气与出行助手，回答简洁、可执行（actionable），使用中文。"
 
+MODEL_NAME = "deepseek-chat"
+
+
+def _accumulate_tokens(prompt_tokens, completion_tokens, model=MODEL_NAME):
+    """把一次调用的 token 用量累加到全局计数器（线程安全）。"""
+    with _token_lock:
+        _token_totals["prompt_tokens"] += prompt_tokens
+        _token_totals["completion_tokens"] += completion_tokens
+        _token_totals["calls"] += 1
+        m = _token_totals["by_model"].setdefault(model, {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+        m["prompt_tokens"] += prompt_tokens
+        m["completion_tokens"] += completion_tokens
+        m["calls"] += 1
+
+
+def reset_token_usage():
+    """清空 token 累加器。评测跑题前调用，保证只统计本轮。"""
+    with _token_lock:
+        _token_totals["prompt_tokens"] = 0
+        _token_totals["completion_tokens"] = 0
+        _token_totals["calls"] = 0
+        _token_totals["by_model"] = {}
+
+
+def get_token_usage():
+    """返回本轮累计的 token 用量快照（线程安全拷贝）。"""
+    with _token_lock:
+        return {
+            "prompt_tokens": _token_totals["prompt_tokens"],
+            "completion_tokens": _token_totals["completion_tokens"],
+            "calls": _token_totals["calls"],
+            "by_model": {k: dict(v) for k, v in _token_totals["by_model"].items()},
+        }
+
+
+def _record_usage(resp, model=MODEL_NAME):
+    """记录本次调用的 token 用量，做两件事：
+
+    1) 【始终执行】累加到全局 token 累加器，供评测成本统计——
+       即使 AGENT_TRACE 关闭也能统计，解决原来"关 trace 就丢 token 数据"的问题。
+    2) 【受 AGENT_TRACE 控制】若追踪开着，把用量写进当前 span（原逻辑）。
+    统计失败绝不抛异常影响主流程。
+    """
+    try:
+        u = getattr(resp, "usage", None)
+        if u is not None:
+            p = getattr(u, "prompt_tokens", 0) or 0
+            c = getattr(u, "completion_tokens", 0) or 0
+            _accumulate_tokens(p, c, model)
+    except Exception:
+        pass
+
+    try:
+        from tracing import enabled, current_span
+        if not enabled():
+            return
+        s = current_span()
+        if s is None:
+            return
+        if u is not None:
+            s.model = model
+            s.prompt_tokens = getattr(u, "prompt_tokens", None)
+            s.completion_tokens = getattr(u, "completion_tokens", None)
+    except Exception:
+        pass  # 统计失败绝不能影响主流程
+
+
+_client = None        # 全局复用，避免每次调用都重建客户端 + 重读 230KB 证书库（Windows 偶发卡顿根因）
+_client_lock = threading.Lock()
+
+# ---------- Token 用量累加器（始终开启，供评测成本统计；与 AGENT_TRACE 开关无关）----------
+# 并发评测时多个线程同时累加，必须用锁保护；DeepSeek 价格另见 eval/cost.py
+_token_lock = threading.Lock()
+_token_totals = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "by_model": {}}
+
+
+def _get_client():
+    """全局唯一的 OpenAI 客户端：线程安全懒加载（双重检查锁定）。
+
+    只在第一次真实调用时创建，之后复用。加锁原因：
+    `if _client is None` 属于 check-then-act，多线程并发时存在竞态，
+    会建出多个客户端、让复用失去意义。双重检查 = 先无锁快路径判断，
+    再加锁二次确认，兼顾性能与安全。
+    """
+    global _client
+    if _client is None:                 # 快路径：已创建则无锁直接返回（热路径零开销）
+        with _client_lock:
+            if _client is None:         # 拿到锁后二次确认，避免并发重复创建
+                _client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com", timeout=30)
+    return _client
+
 
 def _real_chat(messages):
-    client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    client = _get_client()
     resp = client.chat.completions.create(
-        model="deepseek-chat",
+        model=MODEL_NAME,
         messages=messages,
         temperature=0.3,
     )
+    _record_usage(resp)
     return resp.choices[0].message.content.strip()
 
 
@@ -87,7 +181,14 @@ def _mock_answer(prompt):
 
 # ---------- 对外接口 ----------
 
+@trace("LLM调用", kind="llm", capture_input=False)
 def chat(messages):
+    # 只记最后一条用户消息：system prompt 每次都一样，记进去纯占空间
+    from tracing import current_span
+    s = current_span()
+    if s is not None:
+        s.input_text = str(messages[-1]["content"])[:500]
+
     if USE_REAL_LLM:
         return _real_chat(messages)
     last = messages[-1]["content"]

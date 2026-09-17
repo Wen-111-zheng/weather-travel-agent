@@ -34,24 +34,44 @@ def main():
     print(f"[LLM 模式] {llm_mode()} | [框架] {args.framework}")
 
     if args.framework == "langgraph":
-        from langgraph_flow import run as lg_run
-        answer = lg_run(args.query)
+        # 多轮对话：同一 MemorySaver + 固定 thread_id，跨轮共享状态（上一轮城市/偏好被引用）
+        from langgraph_flow import create_langgraph_app
+        from langgraph.checkpoint.memory import MemorySaver
+        cp = MemorySaver()
+        app = create_langgraph_app(cp)
+        tid = "cli-session"
+        q = args.query
+        while True:
+            result = app.invoke({"question": q}, config={"configurable": {"thread_id": tid}})
+            print("回答：")
+            print(result.get("answer", ""))
+            try:
+                nxt = input("\n（多轮对话中，直接回车退出）还想问点什么？ ").strip()
+            except EOFError:
+                print()
+                break
+            if not nxt:
+                break
+            q = nxt
+        # 会话结束再清临时偏好，避免同一趟出行多轮被误清（稳定偏好如通勤/防晒保留）
+        from memory.user_profile import clear_temporary_preferences
+        res = clear_temporary_preferences()
+        if res["cleared"]:
+            print(f"\n[记忆清理] 已清掉本轮临时偏好：{res['cleared']}（不影响稳定偏好）")
     else:
         from flow import create_weather_travel_flow
         flow = create_weather_travel_flow()
         shared = {"question": args.query}
         flow.run(shared)
         answer = shared.get("answer")
-
-    print("回答：")
-    print(answer)
-
-    # 跑完本轮后清掉"带宝宝/带老人"等临时上下文偏好，避免污染下一轮
-    # （稳定偏好如"通勤/防晒"会保留）
-    from memory.user_profile import clear_temporary_preferences
-    res = clear_temporary_preferences()
-    if res["cleared"]:
-        print(f"\n[记忆清理] 已清掉本轮临时偏好：{res['cleared']}（不影响稳定偏好）")
+        print("回答：")
+        print(answer)
+        # 跑完本轮后清掉"带宝宝/带老人"等临时上下文偏好，避免污染下一轮
+        # （稳定偏好如"通勤/防晒"会保留）
+        from memory.user_profile import clear_temporary_preferences
+        res = clear_temporary_preferences()
+        if res["cleared"]:
+            print(f"\n[记忆清理] 已清掉本轮临时偏好：{res['cleared']}（不影响稳定偏好）")
 
 
 if __name__ == "__main__":

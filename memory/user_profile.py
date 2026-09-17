@@ -9,7 +9,12 @@
 """
 import os
 import json
+import threading
 from collections import Counter
+
+# 阶段三 ②：记忆文件在 HTTP 服务下会被并发请求读写，加锁避免写串/读到半截文件。
+# 模块级单锁即可（load/save 都走它）；原子写（先写 .tmp 再 os.replace）进一步防止崩溃留半截文件。
+_MEM_LOCK = threading.Lock()
 
 # 临时上下文偏好：仅当前这一轮出行有效（带宝宝/带老人/陪老人等）。
 # 与"稳定偏好"(如通勤、骑行、防晒)区分开，跑完本轮自动从记忆里清掉，
@@ -23,55 +28,65 @@ MEMORY_PATH = os.path.join(os.path.dirname(__file__), "user_profile.json")
 
 
 def _load():
+    """读取记忆（调用方需自行持锁，见 _MEM_LOCK）。"""
     if os.path.exists(MEMORY_PATH):
         try:
-            return json.load(open(MEMORY_PATH, encoding="utf-8"))
+            with open(MEMORY_PATH, encoding="utf-8") as f:
+                return json.load(f)
         except Exception:
             pass
     return {"cities": {}, "preferences": [], "history": []}
 
 
 def _save(d):
-    json.dump(d, open(MEMORY_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    """原子写记忆（调用方需自行持锁，见 _MEM_LOCK）。先写 .tmp 再 os.replace。"""
+    tmp = MEMORY_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, MEMORY_PATH)  # 原子替换，避免写到一半被读到
 
 
 def record_query(city, preferences=None):
-    """记录一次查询，更新城市频次与偏好标签。"""
-    d = _load()
-    d["cities"][city] = d["cities"].get(city, 0) + 1
-    if preferences:
-        for p in preferences:
-            if p not in d["preferences"]:
-                d["preferences"].append(p)
-    d["history"].append(city)
-    if len(d["history"]) > 30:
-        d["history"] = d["history"][-30:]
-    _save(d)
+    """记录一次查询，更新城市频次与偏好标签。整段读改写在锁内，并发安全（防 lost-update）。"""
+    with _MEM_LOCK:
+        d = _load()
+        d["cities"][city] = d["cities"].get(city, 0) + 1
+        if preferences:
+            for p in preferences:
+                if p not in d["preferences"]:
+                    d["preferences"].append(p)
+        d["history"].append(city)
+        if len(d["history"]) > 30:
+            d["history"] = d["history"][-30:]
+        _save(d)
     return d
 
 
 def get_profile():
-    return _load()
+    with _MEM_LOCK:
+        return _load()
 
 
 def repeat_rate():
     """同一会话内重复问同一城市的占比（越低越好，记忆生效的标志）。"""
-    d = _load()
-    h = d["history"]
-    if not h:
-        return 0.0
-    cnt = Counter(h)
-    repeats = sum(v - 1 for v in cnt.values() if v > 1)
-    return round(repeats / len(h), 3)
+    with _MEM_LOCK:
+        d = _load()
+        h = d["history"]
+        if not h:
+            return 0.0
+        cnt = Counter(h)
+        repeats = sum(v - 1 for v in cnt.values() if v > 1)
+        return round(repeats / len(h), 3)
 
 
 def reset():
-    if os.path.exists(MEMORY_PATH):
-        os.remove(MEMORY_PATH)
+    with _MEM_LOCK:
+        if os.path.exists(MEMORY_PATH):
+            os.remove(MEMORY_PATH)
 
 
 def clear_temporary_preferences():
-    """清掉临时上下文偏好（带宝宝/带老人/陪老人等）。
+    """清掉临时上下文偏好（带宝宝/带老人/陪老人等）。整段读改写在锁内，并发安全。
 
     设计原因：这些是"这一趟出行的临时上下文"（这次带宝宝出门），
     不是稳定的用户画像（我经常通勤）。若不清掉，会被
@@ -79,11 +94,12 @@ def clear_temporary_preferences():
     "我一个人出门"却给"带宝宝"建议。
     稳定偏好（如"通勤"/"防晒"/"骑行"）会保留。
     """
-    d = _load()
-    before = d.get("preferences", [])
-    after = [p for p in before if p not in TEMPORARY_PREFERENCE_TAGS]
-    cleared = [p for p in before if p in TEMPORARY_PREFERENCE_TAGS]
-    if after != before:
-        d["preferences"] = after
-        _save(d)
+    with _MEM_LOCK:
+        d = _load()
+        before = d.get("preferences", [])
+        after = [p for p in before if p not in TEMPORARY_PREFERENCE_TAGS]
+        cleared = [p for p in before if p in TEMPORARY_PREFERENCE_TAGS]
+        if after != before:
+            d["preferences"] = after
+            _save(d)
     return {"cleared": cleared, "kept": after}
