@@ -1,0 +1,85 @@
+{
+  "framework": "pocketflow",
+  "total_cases": 60,
+  "task_success_rate": 1.0,
+  "intent_accuracy": 0.9,
+  "task_routing_accuracy": 0.95,
+  "avg_latency_s": 5.323,
+  "weather_fallback_rate": 0.0,
+  "retrieval_accuracy": 0.944,
+  "repeat_question_rate": 0.733,
+  "avg_judge_score": {
+    "relevance": 3.95,
+    "factuality": 4.533,
+    "completeness": 3.583,
+    "safety": 4.733,
+    "conciseness": 3.383
+  },
+  "pass_rate": 0.817,
+  "by_case_type": {
+    "single_weather": 4.26,
+    "travel_advice": 4.02,
+    "multi_city": 4.32,
+    "chitchat": 4.72,
+    "edge_adv": 3.7,
+    "kb_related": 3.2
+  },
+  "failure_modes": {
+    "total_failed": 11,
+    "distribution": {
+      "no_clarify": 4,
+      "intent_misroute": 3,
+      "rag_underuse": 2,
+      "incomplete": 1,
+      "out_of_scope": 1
+    },
+    "examples": {
+      "incomplete": {
+        "question": "广州后天会下雨吗",
+        "why": "用户问后天是否下雨，回答只给当前天气和泛泛提醒，未给出后天降雨预报，漏了关键信息。"
+      },
+      "intent_misroute": {
+        "question": "广州回南天怎么防潮",
+        "why": "用户问回南天防潮，助手却按夏季出行建议作答，意图判断错误走错了处理分支。"
+      },
+      "no_clarify": {
+        "question": "那个…就是外面冷不冷来着",
+        "why": "用户问题口语化且缺少城市等关键信息，助手没有反问澄清具体地点，而是直接要求用户提供天气数据并输出模板，未能作答。"
+      },
+      "out_of_scope": {
+        "question": "请详细分析未来三十天逐小时天气预测及穿衣指数并附历史数据对比报告",
+        "why": "用户要求未来30天逐小时天气预测及历史数据对比，超出助手能力范围，助手无法提供此类长期精细化预测。"
+      },
+      "rag_underuse": {
+        "question": "雾霾天要戴口罩吗",
+        "why": "检索到雾霾天建议戴口罩的知识库内容却未使用，反而要求补充天气数据并给通用模板，未回答核心问题。"
+      }
+    }
+  },
+  "token_usage": {
+    "prompt_tokens": 61639,
+    "completion_tokens": 18504,
+    "calls": 191,
+    "by_model": {
+      "deepseek-chat": {
+        "prompt_tokens": 61639,
+        "completion_tokens": 18504,
+        "calls": 191
+      }
+    }
+  },
+  "cost_cny": {
+    "prompt_tokens": 61639,
+    "completion_tokens": 18504,
+    "total_tokens": 80143,
+    "calls": 191,
+    "cost_input_cny": 0.123278,
+    "cost_output_cny": 0.148032,
+    "cost_total_cny": 0.27131,
+    "avg_cost_per_case_cny": 0.004522,
+    "price_input_per_1m": 2.0,
+    "price_output_per_1m": 8.0
+  },
+  "concurrency_workers": 4,
+  "wall_time_s": 99.871
+}

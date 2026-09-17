@@ -1,0 +1,38 @@
+[
+  {
+    "session_id": 1,
+    "scenario": "偏好跨轮复用：T1 建立'通勤'偏好，T2 不重提，答案应仍含'通勤'",
+    "turns": [
+      {"question": "北京通勤天气怎么样"},
+      {"question": "上海呢，适合出门吗", "expected_pref": ["通勤"]}
+    ]
+  },
+  {
+    "session_id": 2,
+    "scenario": "重复提问：同一城市连问三次，记忆应记录重复（repeat_rate 偏高）",
+    "turns": [
+      {"question": "北京今天天气"},
+      {"question": "北京今天天气"},
+      {"question": "北京今天天气"}
+    ]
+  },
+  {
+    "session_id": 3,
+    "scenario": "多城市 + 偏好跨轮：T3 建立'骑行'，T4 不重提应仍含'骑行'",
+    "turns": [
+      {"question": "北京天气怎么样"},
+      {"question": "上海天气怎么样，带宝宝"},
+      {"question": "广州适合骑行吗"},
+      {"question": "深圳天气适合出门吗", "expected_pref": ["骑行"]}
+    ]
+  },
+  {
+    "session_id": 4,
+    "scenario": "混合意图：闲聊 + 天气 + 闲聊，验证轮级可用率 turn_pass_rate",
+    "turns": [
+      {"question": "你好"},
+      {"question": "北京今天多少度"},
+      {"question": "讲个笑话"}
+    ]
+  }
+]

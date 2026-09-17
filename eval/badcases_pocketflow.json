@@ -1,0 +1,68 @@
+[
+  {
+    "question": "广州后天会下雨吗",
+    "case_type": "single_weather",
+    "failure_mode": "incomplete",
+    "why": "用户问后天是否下雨，回答只给当前天气和泛泛提醒，未给出后天降雨预报，漏了关键信息。"
+  },
+  {
+    "question": "广州回南天怎么防潮",
+    "case_type": "travel_advice",
+    "failure_mode": "intent_misroute",
+    "why": "用户问回南天防潮，助手却按夏季出行建议作答，意图判断错误走错了处理分支。"
+  },
+  {
+    "question": "成都和上海梅雨季哪个更难受",
+    "case_type": "multi_city",
+    "failure_mode": "intent_misroute",
+    "why": "用户问的是两地梅雨季难受程度的比较，助手却误判为当前天气出行建议，走错了处理分支。"
+  },
+  {
+    "question": "那个…就是外面冷不冷来着",
+    "case_type": "edge_adv",
+    "failure_mode": "no_clarify",
+    "why": "用户问题口语化且缺少城市等关键信息，助手没有反问澄清具体地点，而是直接要求用户提供天气数据并输出模板，未能作答。"
+  },
+  {
+    "question": "今天出门需不需要带伞说说看",
+    "case_type": "edge_adv",
+    "failure_mode": "no_clarify",
+    "why": "问题缺少城市和天气信息，助手虽要求补充但未先给出任何通用建议，属于未澄清就硬答的变体，未满足即时需求。"
+  },
+  {
+    "question": "请详细分析未来三十天逐小时天气预测及穿衣指数并附历史数据对比报告",
+    "case_type": "edge_adv",
+    "failure_mode": "out_of_scope",
+    "why": "用户要求未来30天逐小时天气预测及历史数据对比，超出助手能力范围，助手无法提供此类长期精细化预测。"
+  },
+  {
+    "question": "你国天气怎么样",
+    "case_type": "edge_adv",
+    "failure_mode": "no_clarify",
+    "why": "用户问题缺少城市等关键信息，助手未先反问澄清具体城市，而是直接输出通用清单，未真正获取所需信息。"
+  },
+  {
+    "question": "广州台风天还能出门吗",
+    "case_type": "kb_related",
+    "failure_mode": "intent_misroute",
+    "why": "用户问的是台风天能否出门，助手却按普通阴天天气给出骑行、通勤等出行建议，走错了处理分支。"
+  },
+  {
+    "question": "雾霾天要戴口罩吗",
+    "case_type": "kb_related",
+    "failure_mode": "rag_underuse",
+    "why": "检索到雾霾天建议戴口罩的知识库内容却未使用，反而要求补充天气数据并给通用模板，未回答核心问题。"
+  },
+  {
+    "question": "下雪天开车注意什么",
+    "case_type": "kb_related",
+    "failure_mode": "no_clarify",
+    "why": "用户问的是通用下雪天开车注意事项，并不需要具体城市天气数据，助手却误以为缺少关键信息而要求补充数据，未直接回答雪天驾驶要点。"
+  },
+  {
+    "question": "过敏季怎么防护",
+    "case_type": "kb_related",
+    "failure_mode": "rag_underuse",
+    "why": "用户问的是过敏季通用防护，助手却因缺少天气数据拒答，未利用知识库给出戴口罩、清洁、关注花粉浓度等基本建议。"
+  }
+]
