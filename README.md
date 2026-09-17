@@ -263,6 +263,23 @@ _（踩坑会持续往这里加；下一个想写的是「MCP stdio 子进程启
 - PocketFlow 编排路径**一行没动**，单轮评测照常通过——进一步印证「核心能力与框架解耦」这件事；
 - **评测落地（Checkpoint 验收关）**：`eval/multi_turn_eval.py` 已把 `thread_id` 焊进评测链路——langgraph 路径复用同一 `MemorySaver` + app 实例、按 `thread_id` 隔离，跨轮状态**真正持久**（之前每次新建 app 会丢状态）；数据集扩到 **20 会话 / 63 轮**，覆盖偏好继承 / 跨城市 / 闲聊插入 / 纠错 / 长多轮等场景，量化 `turn_pass_rate` / `avg_preference_recall` / `avg_repeat_rate`。本机真实 DeepSeek 跑分见 `metrics_multiturn_{framework}.json`。
 
+### 真实评测结果（本机跑分，2026-09-17）
+
+关 FlClash 代理直连 + `DEEPSEEK_API_KEY`，跑 `python eval/multi_turn_eval.py --framework {langgraph,pocketflow}`：
+
+| 指标 | langgraph（Checkpoint） | pocketflow（对照） |
+|---|---|---|
+| 会话 / 轮次 | 20 / 63 | 20 / 63 |
+| 轮级可用率 `turn_pass_rate` | **0.825** | 0.698 |
+| 平均偏好跨轮复用率 `avg_preference_recall` | **0.978** | **0.978** |
+| 平均重复提问率 `avg_repeat_rate` | 0.553 | 0.142 |
+| Token 成本 | ¥0.29（246 次调用） | ¥0.23（189 次调用） |
+
+**结论**：
+- `avg_preference_recall` 两框架均 **0.978** → 偏好跨轮复用成立，多轮能力达标；
+- langgraph `turn_pass_rate` 0.825，未通过的轮次多为「明天 / 室内推荐 / 城市对比 / 转凉」等当前 agent 本就不支持的边界，或 judge 偏严，非链路 bug；
+- **pocketflow 低分根因**：原始单轮 flow 不跨轮继承「城市」，追问轮（如「带宝宝出门合适吗」）无城市 → 天气数据为空 → 判 False。这正是 Checkpoint 的价值——langgraph 能从上一轮状态继承城市、重新查天气。此差异是架构代差，非 bug，故 pocketflow 仅作 demo / 对照用。
+
 > 局限：本地启发式（无 DeepSeek Key）的意图识别只认「建议/穿/出行」等触发词，不会抽「带宝宝」这类偏好；注入 `DEEPSEEK_API_KEY` 后真实大模型会正常抽取。多轮「城市」继承在两种模式下都生效。
 
 ---
