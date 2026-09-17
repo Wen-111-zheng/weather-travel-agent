@@ -33,6 +33,11 @@ def _tokens(text):
     return toks
 
 
+def _rrf(rank, k=60):
+    """Reciprocal Rank Fusion 分数：rank 从 0 起，用于融合多路召回的排名。"""
+    return 1.0 / (rank + 1 + k)
+
+
 class KnowledgeBase:
     def __init__(self):
         self.docs = DOCUMENTS
@@ -50,17 +55,41 @@ class KnowledgeBase:
         return list(r.data[0].embedding)
 
     def retrieve(self, query, k=3):
+        """混合召回 + RRF 融合重排（阶段三 ①-A）。
+
+        - 有 embedding：embedding 余弦 top-N 与 关键词 bigram 重叠 top-N 各召回一批候选，
+          用 RRF 融合两路排名后取 top-k（即重排）。
+        - 无 embedding（离线 mock）：仅关键词一路，退化为关键词重叠重排，仍跑通。
+        返回 list[doc]，接口与旧版完全一致，调用方（advice / 评测）无需改动。
+        """
+        n_cand = max(k * 3, k + 2)  # 先扩召回，再重排截断，给重排留出余量
+        fused = {}  # idx -> 融合分
+
+        # 路1：embedding 语义召回
         if self.emb:
             q = self._embed(query)
-            scored = [(self._cosine(q, e), i) for i, e in enumerate(self.emb)]
-            scored.sort(reverse=True)
-            return [self.docs[i] for _, i in scored[:k]]
-        # 关键词回退
+            sims = sorted(
+                ((self._cosine(q, e), i) for i, e in enumerate(self.emb)),
+                reverse=True,
+            )
+            for rank, (_, i) in enumerate(sims[:n_cand]):
+                fused[i] = fused.get(i, 0.0) + _rrf(rank)
+
+        # 路2：关键词 bigram 召回（始终生效；无 Key 时即主路）
         qk = _tokens(query)
-        scored = []
-        for i, d in enumerate(self.docs):
-            overlap = len(qk & _tokens(d["text"]))
-            scored.append((overlap, i))
-        scored.sort(reverse=True)
-        top = [self.docs[i] for _, i in scored[:k] if _ > 0]
-        return top or self.docs[:k]
+        if qk:
+            kw = []
+            for i, d in enumerate(self.docs):
+                ov = len(qk & _tokens(d["text"]))
+                if ov > 0:
+                    kw.append((ov, i))
+            kw.sort(reverse=True)
+            for rank, (_, i) in enumerate(kw[:n_cand]):
+                fused[i] = fused.get(i, 0.0) + _rrf(rank)
+
+        if not fused:
+            # 完全无重叠：退化返回前 k 条，保证至少有上下文
+            return self.docs[:k]
+
+        ranked = sorted(fused.items(), key=lambda kv: -kv[1])
+        return [self.docs[i] for i, _ in ranked[:k]]
